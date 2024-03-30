@@ -1,0 +1,22 @@
+{
+    "start": "node index.js",
+    "name": "music",
+    "actions": [
+        {
+            "name": "music.play",
+            "description": "Plays music for the user",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "songName": {
+                        "type": "string",
+                        "description": "The name of the song"
+                    }
+                },
+                "required": [
+                    "songName"
+                ]
+            }
+        }
+    ]
+}
