@@ -193,6 +193,7 @@ func listenForPlugins(listener net.Listener, out chan PluginConnection) {
 			fmt.Println("Error handling plugin:", err)
 			continue
 		}
+		fmt.Println("Connected plugin:", id)
 		out <- PluginConnection{id, conn}
 	}
 }

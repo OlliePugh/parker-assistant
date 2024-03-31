@@ -11,9 +11,9 @@ import (
 
 func main() {
 	listener := setupSocket()
-	out := make(chan PluginConnection)
+	pluginConnections := make(chan PluginConnection)
 
-	go listenForPlugins(listener, out)
+	go listenForPlugins(listener, pluginConnections)
 	plugins, err := fetchPlugins("./plugins")
 
 	if err != nil {
@@ -40,9 +40,6 @@ func main() {
 		actions,
 	)
 
-	fmt.Printf("pm: %v\n", pm)
-
-	// pm.executeQuery(os.Args[1])
 	connections := make([]PluginConnection, 0)
 	closeHandler(&connections)
 
@@ -54,9 +51,8 @@ func main() {
 	go listenForUserInput(&pm)
 
 	// listen for information on plugin channel
-	for pc := range out {
+	for pc := range pluginConnections {
 		connections = append(connections, pc)
-		fmt.Println(pc.id)
 	}
 }
 

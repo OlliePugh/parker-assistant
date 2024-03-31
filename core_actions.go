@@ -29,7 +29,7 @@ var CorePlugin = Plugin{
 					"type": "object",
 					"properties": {},
 					"required": [],
-					"returns": "The current date"
+					"returns": "The current date in the format 'YYYY-MM-DD'"
 				}`),
 			},
 			plugin: nil},
