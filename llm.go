@@ -9,6 +9,9 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+// messageContextAmount is the number of previous messages to include in the context
+const messageContextAmount = 10
+
 func (pm ParkerModel) generateFunctionDefinitions() []llms.FunctionDefinition {
 	var functions = []llms.FunctionDefinition{
 		{
@@ -70,19 +73,26 @@ To use a tool, respond with a JSON array object with the following structure:
 	"tool_input": <parameters for the tool matching the above JSON schema>
 }]
 
-Always provide a tell.user to communicate with the user.
+You MUST always return a JSON payload with the above structure.
+
+You can use tools to gather more infomation before providing a final response to the user.
+
+Provide a tell.user tool to read out a message to the user.
 `, string(bs))
 }
 
-func (pm ParkerModel) fetchActions(humanPrompt string) string {
+func (pm ParkerModel) fetchActions() string {
 	ctx := context.Background()
 
 	defer ctx.Done()
 
 	content := []llms.MessageContent{
 		llms.TextParts("system", systemMessage(pm.generateFunctionDefinitions())),
-		llms.TextParts("human", humanPrompt),
 	}
+
+	l := len(pm.conversation)
+
+	content = append(content, pm.conversation[max(0, l-messageContextAmount):l]...)
 
 	co := llms.WithOptions(llms.CallOptions{
 		Temperature: 0.2,
@@ -96,13 +106,23 @@ func (pm ParkerModel) fetchActions(humanPrompt string) string {
 }
 
 type ParkerModel struct {
-	llm     llms.Model
-	actions []Action
+	llm          llms.Model
+	actions      []Action
+	conversation []llms.MessageContent
 }
 
-func (pm ParkerModel) executeQuery(request string) string {
-	returnedActions := pm.fetchActions(request)
+func NewParkerModel(llm llms.Model, actions []Action) ParkerModel {
+	return ParkerModel{
+		llm:          llm,
+		actions:      actions,
+		conversation: []llms.MessageContent{},
+	}
+}
 
+func (pm *ParkerModel) executeQuery(request string) string {
+	pm.conversation = append(pm.conversation, llms.TextParts("human", request))
+	returnedActions := pm.fetchActions()
+	pm.conversation = append(pm.conversation, llms.TextParts("ai", returnedActions))
 	fmt.Println("\n\n" + returnedActions)
 	return returnedActions
 }

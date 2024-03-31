@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -19,7 +21,10 @@ func main() {
 		return
 	}
 
+	corePlugin := getCorePlugin()
+
 	actions := make([]Action, 0)
+	actions = append(actions, corePlugin.Actions...)
 	for _, plugin := range plugins {
 		actions = append(actions, plugin.Actions...)
 	}
@@ -30,10 +35,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pm := ParkerModel{
+	pm := NewParkerModel(
 		llm,
 		actions,
-	}
+	)
+
 	fmt.Printf("pm: %v\n", pm)
 
 	// pm.executeQuery(os.Args[1])
@@ -45,9 +51,24 @@ func main() {
 		go plugin.Initialise()
 	}
 
+	go listenForUserInput(&pm)
+
 	// listen for information on plugin channel
 	for pc := range out {
 		connections = append(connections, pc)
 		fmt.Println(pc.id)
+	}
+}
+
+func listenForUserInput(pm *ParkerModel) {
+	for {
+		buf := bufio.NewReader(os.Stdin)
+		fmt.Print("> ")
+		sentence, err := buf.ReadBytes('\n')
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			pm.executeQuery(string(sentence))
+		}
 	}
 }

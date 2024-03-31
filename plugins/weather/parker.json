@@ -1,20 +1,20 @@
 {
     "start": "node index.js",
-    "name": "music",
+    "name": "weather",
     "actions": [
         {
-            "name": "music.play",
-            "description": "Plays music for the user",
+            "name": "weather.get",
+            "description": "Get the weather for a location",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "songName": {
+                    "locationName": {
                         "type": "string",
-                        "description": "The name of the song"
+                        "description": "The location of the weather"
                     }
                 },
                 "required": [
-                    "songName"
+                    "locationName"
                 ]
             }
         }
