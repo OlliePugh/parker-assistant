@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,7 +39,21 @@ func externalPluginExecutor(a Action) func(map[string]any) (string, error) {
 			Timeout: time.Second * 2, // Timeout after 2 seconds
 		}
 
-		res, err := client.Post("http://"+a.plugin.Address, "application/json", bytes.NewBuffer(toolParams))
+		// url builders
+		url := url.URL{
+			Scheme: "http",
+			Host:   a.plugin.Address,
+			Path:   "/" + a.Name}
+
+		req, err := http.NewRequest("POST", url.String(), bytes.NewBuffer(toolParams))
+		req.Header.Set("Content-Type", "application/json")
+
+		if err != nil {
+			slog.Error("Error creating request:", err)
+			return "", err
+		}
+
+		res, err := client.Do(req)
 
 		if err != nil {
 			slog.Error("Error executing action:", a.Name, err)

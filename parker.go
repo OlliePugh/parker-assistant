@@ -34,10 +34,6 @@ func main() {
 		}
 	}
 
-	fmt.Println(actions["weather.get"].execute(map[string]any{}))
-
-	return
-
 	llm, err := openai.New()
 
 	if err != nil {

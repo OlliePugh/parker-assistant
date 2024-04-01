@@ -4,19 +4,14 @@
     "actions": [
         {
             "name": "weather.get",
-            "description": "Get the weather for a location",
+            "description": "Get the weather for a location on a given date (future or past)",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "locationName": {
                         "type": "string",
                         "description": "The location of the weather",
-                        "default": "Users current location"
-                    },
-                    "date": {
-                        "type": "string",
-                        "description": "The date of the weather in YYYY-MM-DD format, current date can be retrieved from date.get tool",
-                        "default": "The curent date"
+                        "default": "Default to users current location if not specified"
                     }
                 },
                 "required": []
