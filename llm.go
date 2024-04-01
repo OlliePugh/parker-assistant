@@ -143,7 +143,7 @@ loop:
 }
 
 func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
-	var userInvalidMessage = llms.TextParts("user", "{\"error\": \"Invalid response please try again\"}")
+	var userInvalidMessage = llms.TextParts("human", "{\"error\": \"Invalid response please try again following the rules previously mentioned in the system message\"}")
 
 	// this will perform better if we include an actual error message
 	invalidMessagesAndAttempts := []llms.MessageContent{
@@ -156,9 +156,6 @@ func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAc
 	// closure to reattempt fetching actions
 	reattempt = func(attemptNumber int) ([]ParkerAction, string, error) {
 		slog.Debug("reattempting", "value", attemptNumber)
-		if attemptNumber > 3 {
-			return nil, "", fmt.Errorf("failed to correct invalid response after 3 attempts")
-		}
 
 		actions, rawResponse, err := pm.fetchActions(invalidMessagesAndAttempts)
 		slog.Debug("actions", "value", actions)
@@ -204,7 +201,7 @@ func (pm ParkerModel) fetchActions(tempMessages []llms.MessageContent) ([]Parker
 	completions, err := pm.llm.GenerateContent(ctx, conversation, co)
 
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Failed to generate content", err)
 		return nil, "", err
 	}
 
@@ -212,8 +209,8 @@ func (pm ParkerModel) fetchActions(tempMessages []llms.MessageContent) ([]Parker
 	actionsToComplete, err := NewParkerResponse(result, &pm)
 
 	if err != nil {
-		// TODO try again and but tell the agent that the response was invalid
-		log.Fatal("Error parsing response", err, result)
+		slog.Error("Error parsing response", err, result)
+		return nil, "", err
 	}
 
 	return actionsToComplete, result, nil
