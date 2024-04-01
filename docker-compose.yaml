@@ -7,3 +7,9 @@ services:
       dockerfile: plugins/weather/Dockerfile
     ports:
       - "8080:8080"
+  parker_music:
+    build:
+      context: .
+      dockerfile: plugins/music/Dockerfile
+    ports:
+      - "8081:8081"

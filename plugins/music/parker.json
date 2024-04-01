@@ -1,0 +1,55 @@
+{
+    "address": "127.0.0.1:8081",
+    "name": "music",
+    "actions": [
+        {
+            "name": "music.play",
+            "description": "Play a song through the users device",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "songName": {
+                        "type": "string",
+                        "description": "The name of the song to play"
+                    }
+                },
+                "required": [
+                    "songName"
+                ]
+            }
+        },
+        {
+            "name": "music.skip",
+            "description": "Skip the currently playing song",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skipForward": {
+                        "type": "boolean",
+                        "description": "Whether to skip forward or back",
+                        "default": true
+                    }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "music.continue",
+            "description": "Resume music playback",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "music.stop",
+            "description": "Stops/pauses music",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    ]
+}

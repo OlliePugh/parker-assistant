@@ -126,7 +126,7 @@ loop:
 			}
 		}
 
-		actions, err = pm.getLlmDecisioning(string(stringResults), "human")
+		actions, err = pm.getLlmDecisioning("Here is the result of the tools you used: "+string(stringResults), "human")
 		if err != nil {
 			slog.Error("error fetching actions", err)
 			break

@@ -8,6 +8,7 @@ app.use(express.json());
 
 app.post("/weather.get", async (req, res) => {
   const location = req.body.locationName ?? "Loughborough";
+  console.log(`Getting weather data for ${location}`);
   const url = new URL("https://api.openweathermap.org/data/2.5/weather");
   url.searchParams.append("q", location);
   url.searchParams.append("APPID", process.env.OPEN_WEATHER_API_KEY);
@@ -31,5 +32,5 @@ const parseResponse = (response) => {
 };
 
 app.listen(port, () => {
-  console.log(`Weather pluginr running on http://localhost:${port}`);
+  console.log(`Weather plugin running on http://localhost:${port}`);
 });

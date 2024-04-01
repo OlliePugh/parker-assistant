@@ -15,7 +15,7 @@ var CorePlugin = Plugin{
 		{
 			FunctionDefinition: llms.FunctionDefinition{
 				Name:        "tell.user",
-				Description: "Reads out a message to the user",
+				Description: "Reads out a message to the user, refer to the user as sir",
 				Parameters: json.RawMessage(`{
 					"type": "object",
 					"profperties": {
