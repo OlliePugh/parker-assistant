@@ -49,39 +49,103 @@ func NewParkerModel(llm llms.Model, actions []Action) ParkerModel {
 	}
 }
 
-func (pm *ParkerModel) executeQuery(request string) string {
+func (pm *ParkerModel) getLlmDecisioning(request string) ([]ParkerAction, error) {
+	// add the user input to the conversation
 	pm.conversation = append(pm.conversation, llms.TextParts("human", request))
-	_, rawResponse := pm.fetchActions()
 
-	// is the response valid?
+	// fetch parkers actions given the conversation
+	actions, rawResponse, err := pm.fetchActions([]llms.MessageContent{})
 
-	// does the response contain a tell.user
+	// not sure this should live here
+	if err != nil {
+		actions, rawResponse, err = pm.correctInvalidResponse(rawResponse)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	pm.conversation = append(pm.conversation, llms.TextParts("ai", rawResponse))
-	fmt.Println("\n\n" + rawResponse)
-	return rawResponse
+	return actions, err
 }
 
-func (pm ParkerModel) fetchActions() ([]ParkerAction, string) {
-	ctx := context.Background()
+func (pm *ParkerModel) executeUserInput(request string) ([]ParkerAction, error) {
+	actions, err := pm.getLlmDecisioning(request)
 
-	defer ctx.Done()
+	// print actions
+	for _, action := range actions {
+		fmt.Println(action)
+	}
 
+	if err != nil {
+		fmt.Println("error fetching actions", err)
+		return nil, err
+	}
+
+	return actions, nil
+}
+
+func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
+
+	var userInvalidMessage = llms.TextParts("user", "{\"error\": \"Invalid response please try again\"}")
+
+	// this will perform better if we include an actual error message
+	invalidMessagesAndAttempts := []llms.MessageContent{
+		llms.TextParts("ai", invalidResponse),
+		// put in JSON to show that it isnt read from the user
+		userInvalidMessage,
+	}
+
+	var reattempt func(int) ([]ParkerAction, string, error)
+	// closure to reattempt fetching actions
+	reattempt = func(attemptNumber int) ([]ParkerAction, string, error) {
+		if attemptNumber > 3 {
+			return nil, "", fmt.Errorf("failed to correct invalid response after 3 attempts")
+		}
+
+		actions, rawResponse, err := pm.fetchActions(invalidMessagesAndAttempts)
+		invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, llms.TextParts("ai", rawResponse))
+		invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, userInvalidMessage)
+
+		// if we have retries left to use
+		if err != nil && attemptNumber < 3 {
+			reattempt(attemptNumber + 1)
+		}
+
+		return actions, rawResponse, err
+	}
+
+	correctedResult, rawResponse, err := reattempt(1)
+
+	if err != nil {
+		return nil, "", err
+	}
+	return correctedResult, rawResponse, err
+}
+
+func (pm ParkerModel) buildConversationHistory(historyAmount int) []llms.MessageContent {
 	content := []llms.MessageContent{
 		llms.TextParts("system", systemMessage(pm.generateFunctionDefinitions())),
 	}
-
 	l := len(pm.conversation)
+	content = append(content, pm.conversation[max(0, l-historyAmount):l]...)
+	return content
+}
 
-	content = append(content, pm.conversation[max(0, l-messageContextAmount):l]...)
+func (pm ParkerModel) fetchActions(tempMessages []llms.MessageContent) ([]ParkerAction, string, error) {
+	ctx := context.Background()
+	defer ctx.Done()
 
 	co := llms.WithOptions(llms.CallOptions{
 		Temperature: 0.2,
 	})
-	completions, err := pm.llm.GenerateContent(ctx, content, co)
+
+	conversation := append(pm.buildConversationHistory(messageContextAmount), tempMessages...)
+
+	completions, err := pm.llm.GenerateContent(ctx, conversation, co)
 
 	if err != nil {
 		log.Fatal(err)
+		return nil, "", err
 	}
 
 	result := completions.Choices[0].Content
@@ -92,5 +156,5 @@ func (pm ParkerModel) fetchActions() ([]ParkerAction, string) {
 		log.Fatal("Error parsing response", err, result)
 	}
 
-	return actionsToComplete, result
+	return actionsToComplete, result, nil
 }

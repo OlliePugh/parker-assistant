@@ -10,12 +10,16 @@
                 "properties": {
                     "locationName": {
                         "type": "string",
-                        "description": "The location of the weather"
+                        "description": "The location of the weather",
+                        "default": "Users current location"
+                    },
+                    "date": {
+                        "type": "string",
+                        "description": "The date of the weather in YYYY-MM-DD format, current date can be retrieved from date.get tool",
+                        "default": "The curent date"
                     }
                 },
-                "required": [
-                    "locationName"
-                ]
+                "required": []
             }
         }
     ]

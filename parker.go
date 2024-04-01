@@ -64,7 +64,7 @@ func listenForUserInput(pm *ParkerModel) {
 		if err != nil {
 			fmt.Println(err)
 		} else {
-			pm.executeQuery(string(sentence))
+			pm.executeUserInput(string(sentence))
 		}
 	}
 }
