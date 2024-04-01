@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,11 +14,11 @@ func closeHandler(connections *[]PluginConnection) {
 
 	go func() {
 		<-sigc
-		fmt.Println("Received SIGINT. Closing all connections...")
+		slog.Info("Received SIGINT. Closing all connections...")
 		// Close all connections
 		for _, pc := range *connections {
 			pc.conn.Close()
-			fmt.Println("Closing connection to plugin", pc.id)
+			slog.Info("Closing connection to plugin", pc.id)
 		}
 		os.Exit(1)
 	}()

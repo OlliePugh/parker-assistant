@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
+	"io"
+	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/tmc/langchaingo/llms"
 )
@@ -18,84 +22,62 @@ type Param struct {
 
 type Action struct {
 	llms.FunctionDefinition
-	plugin *Plugin
+	plugin  *Plugin
+	execute func(map[string]any) (string, error)
+}
+
+func externalPluginExecutor(a Action) func(map[string]any) (string, error) {
+	return func(props map[string]any) (string, error) {
+		// send HTTP post request to plugin
+		toolParams, err := json.Marshal(props)
+		if err != nil {
+			return "", err
+		}
+
+		client := http.Client{
+			Timeout: time.Second * 2, // Timeout after 2 seconds
+		}
+
+		res, err := client.Post("http://"+a.plugin.Address, "application/json", bytes.NewBuffer(toolParams))
+
+		if err != nil {
+			slog.Error("Error executing action:", a.Name, err)
+			return "", err
+		}
+
+		if res.StatusCode != http.StatusOK {
+			slog.Error("Error executing action:", a.Name, "status code:", res.StatusCode)
+			return "", nil
+		}
+
+		if res.Body != nil {
+			defer res.Body.Close()
+		}
+
+		body, readErr := io.ReadAll(res.Body)
+		if readErr != nil {
+			slog.Error("Error reading response body:", readErr)
+			return "", readErr
+		}
+
+		slog.Debug("Executing action:", a.Name)
+		return string(body), nil
+	}
 }
 
 type Plugin struct {
-	Name         string   `json:"name"`
-	StartCommand string   `json:"start"`
-	Actions      []Action `json:"actions"`
-	RootPath     string
-	cmd          *exec.Cmd
-}
-
-func (p *Plugin) Initialise() error {
-	if (p.cmd != nil) && (p.cmd.Process != nil) {
-		fmt.Println("Plugin already running")
-		return nil
-	}
-
-	// Change to the specified directory
-	err := os.Chdir(p.RootPath)
-	if err != nil {
-		fmt.Println("Error changing directory:", err)
-		return err
-	}
-
-	// Create the command
-	p.cmd = exec.Command("sh", "-c", p.StartCommand)
-
-	// Run the command
-	_, err = p.cmd.Output()
-	if err != nil {
-		fmt.Println("Error executing command:", err)
-		return err
-	}
-	return nil
-}
-
-func (p *Plugin) Kill() error {
-	if p.cmd == nil {
-		fmt.Println("Plugin not running")
-		return nil
-	}
-
-	// Kill the plugin
-	err := p.cmd.Process.Kill()
-	if err != nil {
-		fmt.Println("Error killing plugin:", err)
-		return err
-	}
-
-	// Wait for the plugin to exit
-	err = p.cmd.Wait()
-	if err != nil {
-		fmt.Println("Error waiting for plugin to exit:", err)
-		return err
-	}
-
-	return nil
-
-}
-
-func initialiseSocket() (net.Listener, error) {
-	socketPath := "/tmp/plugin_socket"
-	os.Remove(socketPath) // Remove existing socket file if exists
-
-	// Create Unix domain socket
-	listener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		fmt.Println("Error listening:", err)
-		return nil, err
-	}
-	return listener, nil
+	Name     string   `json:"name"`
+	Address  string   `json:"address"`
+	Actions  []Action `json:"actions"`
+	RootPath string
+	cmd      *exec.Cmd
 }
 
 func fetchPlugins(searchPath string) ([]Plugin, error) {
 	plugins := []Plugin{}
 	entries, err := os.ReadDir(searchPath)
 	if err != nil {
-		fmt.Println("Error reading directory:", err)
+		slog.Error("Error reading directory:", err)
 		return nil, err
 	}
 
@@ -130,20 +112,21 @@ func parsePluginConfig(path string) (Plugin, error) {
 	pluginData, err := os.ReadFile(path)
 	var plugin Plugin
 	if err != nil {
-		fmt.Println("Error reading plugin file:", err)
+		slog.Error("Error reading plugin file:", err)
 		return plugin, err
 	}
 
 	err = json.Unmarshal(pluginData, &plugin)
 	if err != nil {
-		fmt.Println("Error parsing plugin JSON:", err)
+		slog.Error("Error parsing plugin JSON:", err)
 		return plugin, err
 	}
 	plugin.RootPath = filepath.Dir(path)
 
 	// set plugin on each action to be plugin
-	for _, action := range plugin.Actions {
-		action.plugin = &plugin
+	for i := 0; i < len(plugin.Actions); i++ {
+		plugin.Actions[i].plugin = &plugin
+		plugin.Actions[i].execute = externalPluginExecutor(plugin.Actions[i])
 	}
 
 	return plugin, nil
@@ -156,7 +139,7 @@ func handlePlugin(conn net.Conn) (string, error) {
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
 	if err != nil {
-		fmt.Println("Error reading from plugin:", err)
+		slog.Error("Error reading from plugin:", err)
 		return "", err
 	}
 
@@ -164,36 +147,7 @@ func handlePlugin(conn net.Conn) (string, error) {
 	return request, nil
 }
 
-func setupSocket() net.Listener {
-	// Setup a socket to listen for plugins
-	listener, err := initialiseSocket()
-	if err != nil {
-		fmt.Println("Error initialising socket:", err)
-		return nil
-	}
-	return listener
-}
-
 type PluginConnection struct {
 	id   string
 	conn net.Conn
-}
-
-func listenForPlugins(listener net.Listener, out chan PluginConnection) {
-	for {
-		// Accept connections from plugins
-		conn, err := listener.Accept()
-		if err != nil {
-			fmt.Println("Error accepting connection:", err)
-			return
-		}
-
-		id, err := handlePlugin(conn)
-		if err != nil {
-			fmt.Println("Error handling plugin:", err)
-			continue
-		}
-		fmt.Println("Connected plugin:", id)
-		out <- PluginConnection{id, conn}
-	}
 }

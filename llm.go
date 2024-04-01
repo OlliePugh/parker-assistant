@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 
 	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/schema"
 )
 
 // messageContextAmount is the number of previous messages to include in the context
 const messageContextAmount = 10
 
 func systemMessage(functions []llms.FunctionDefinition) string {
+	slog.Debug("Generating system message")
 	bs, err := json.Marshal(functions)
 	if err != nil {
 		log.Fatal(err)
@@ -37,11 +40,12 @@ Provide a tell.user tool to read out a message to the user.
 
 type ParkerModel struct {
 	llm          llms.Model
-	actions      []Action
+	actions      map[string]Action
 	conversation []llms.MessageContent
 }
 
-func NewParkerModel(llm llms.Model, actions []Action) ParkerModel {
+func NewParkerModel(llm llms.Model, actions map[string]Action) ParkerModel {
+	slog.Debug("Creating new ParkerModel")
 	return ParkerModel{
 		llm:          llm,
 		actions:      actions,
@@ -49,15 +53,18 @@ func NewParkerModel(llm llms.Model, actions []Action) ParkerModel {
 	}
 }
 
-func (pm *ParkerModel) getLlmDecisioning(request string) ([]ParkerAction, error) {
+func (pm *ParkerModel) getLlmDecisioning(request string, role schema.ChatMessageType) ([]ParkerAction, error) {
 	// add the user input to the conversation
-	pm.conversation = append(pm.conversation, llms.TextParts("human", request))
+	pm.conversation = append(pm.conversation, llms.TextParts(role, request))
+	slog.Debug("conversation", "value", pm.conversation)
 
 	// fetch parkers actions given the conversation
 	actions, rawResponse, err := pm.fetchActions([]llms.MessageContent{})
+	slog.Debug("actions", "value", actions)
 
 	// not sure this should live here
 	if err != nil {
+		slog.Warn("failed to get actions trying again", err)
 		actions, rawResponse, err = pm.correctInvalidResponse(rawResponse)
 		if err != nil {
 			return nil, err
@@ -68,16 +75,67 @@ func (pm *ParkerModel) getLlmDecisioning(request string) ([]ParkerAction, error)
 	return actions, err
 }
 
-func (pm *ParkerModel) executeUserInput(request string) ([]ParkerAction, error) {
-	actions, err := pm.getLlmDecisioning(request)
+type ToolResult struct {
+	Tool       string
+	ToolOutput any
+}
 
-	// print actions
-	for _, action := range actions {
-		fmt.Println(action)
+func (pm *ParkerModel) executeUserInput(request string) ([]ParkerAction, error) {
+	actions, err := pm.getLlmDecisioning(request, "human")
+
+	// do while tell.user not in actions
+loop:
+	for {
+		// Create a channel to receive the results from each routine
+		resultCh := make(chan ToolResult)
+
+		// Execute the actions in parallel
+		for _, action := range actions {
+			go func(action ParkerAction) {
+				result, err := pm.actions[action.Tool].execute(action.ToolInput)
+				if err != nil {
+					slog.Error("error executing action (I NEED TO HANDLE THIS ERROR)", err)
+					return
+				}
+				resultCh <- ToolResult{action.Tool, result}
+			}(action)
+		}
+
+		// make an array of results
+		results := make([]ToolResult, 0)
+
+		// collect the results
+		for range actions {
+			result := <-resultCh
+			results = append(results, result)
+		}
+
+		slog.Debug("results", results)
+
+		stringResults, err := json.Marshal(results)
+
+		if err != nil {
+			slog.Error("error marshalling results", err)
+			break
+		}
+
+		// if tell.user is in actions
+		for _, result := range results {
+			if result.Tool == "tell.user" {
+				break loop // the user has been told something, no need for internal processing
+			}
+		}
+
+		actions, err = pm.getLlmDecisioning(string(stringResults), "human")
+		if err != nil {
+			slog.Error("error fetching actions", err)
+			break
+		}
+
 	}
 
 	if err != nil {
-		fmt.Println("error fetching actions", err)
+		slog.Error("error fetching actions", err)
 		return nil, err
 	}
 
@@ -85,7 +143,6 @@ func (pm *ParkerModel) executeUserInput(request string) ([]ParkerAction, error) 
 }
 
 func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
-
 	var userInvalidMessage = llms.TextParts("user", "{\"error\": \"Invalid response please try again\"}")
 
 	// this will perform better if we include an actual error message
@@ -98,16 +155,19 @@ func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAc
 	var reattempt func(int) ([]ParkerAction, string, error)
 	// closure to reattempt fetching actions
 	reattempt = func(attemptNumber int) ([]ParkerAction, string, error) {
+		slog.Debug("reattempting", "value", attemptNumber)
 		if attemptNumber > 3 {
 			return nil, "", fmt.Errorf("failed to correct invalid response after 3 attempts")
 		}
 
 		actions, rawResponse, err := pm.fetchActions(invalidMessagesAndAttempts)
-		invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, llms.TextParts("ai", rawResponse))
-		invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, userInvalidMessage)
+		slog.Debug("actions", "value", actions)
 
-		// if we have retries left to use
+		// if it failed again and we have retries left to use
 		if err != nil && attemptNumber < 3 {
+			slog.Warn("failed to get actions trying again", err)
+			invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, llms.TextParts("ai", rawResponse))
+			invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, userInvalidMessage)
 			reattempt(attemptNumber + 1)
 		}
 

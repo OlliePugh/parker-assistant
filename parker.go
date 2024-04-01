@@ -4,30 +4,39 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 
 	"github.com/tmc/langchaingo/llms/openai"
 )
 
 func main() {
-	listener := setupSocket()
-	pluginConnections := make(chan PluginConnection)
+	var programLevel = new(slog.LevelVar) // Info by default
+	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: programLevel})
+	slog.SetDefault(slog.New(h))
+	programLevel.Set(slog.LevelInfo)
 
-	go listenForPlugins(listener, pluginConnections)
-	plugins, err := fetchPlugins("./plugins")
-
+	plugins, err := fetchPlugins("plugins")
 	if err != nil {
-		fmt.Println("Error fetching plugins:", err)
+		log.Fatal(err)
 		return
 	}
-
 	corePlugin := getCorePlugin()
 
-	actions := make([]Action, 0)
-	actions = append(actions, corePlugin.Actions...)
-	for _, plugin := range plugins {
-		actions = append(actions, plugin.Actions...)
+	actions := make(map[string]Action, 0)
+	for _, action := range corePlugin.Actions {
+		actions[action.FunctionDefinition.Name] = action
 	}
+
+	for _, plugin := range plugins {
+		for _, action := range plugin.Actions {
+			actions[action.FunctionDefinition.Name] = action
+		}
+	}
+
+	fmt.Println(actions["weather.get"].execute(map[string]any{}))
+
+	return
 
 	llm, err := openai.New()
 
@@ -43,17 +52,7 @@ func main() {
 	connections := make([]PluginConnection, 0)
 	closeHandler(&connections)
 
-	// start all plugins
-	for _, plugin := range plugins {
-		go plugin.Initialise()
-	}
-
-	go listenForUserInput(&pm)
-
-	// listen for information on plugin channel
-	for pc := range pluginConnections {
-		connections = append(connections, pc)
-	}
+	listenForUserInput(&pm)
 }
 
 func listenForUserInput(pm *ParkerModel) {
@@ -62,8 +61,9 @@ func listenForUserInput(pm *ParkerModel) {
 		fmt.Print("> ")
 		sentence, err := buf.ReadBytes('\n')
 		if err != nil {
-			fmt.Println(err)
+			slog.Error("Error reading user input", err)
 		} else {
+			slog.Debug("User input:", "value", string(sentence))
 			pm.executeUserInput(string(sentence))
 		}
 	}
