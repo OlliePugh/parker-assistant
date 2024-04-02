@@ -3,13 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -36,7 +35,7 @@ func externalPluginExecutor(a Action) func(map[string]any) (string, error) {
 		}
 
 		client := http.Client{
-			Timeout: time.Second * 2, // Timeout after 2 seconds
+			Timeout: time.Second * 10, // Timeout after 2 seconds
 		}
 
 		// url builders
@@ -49,20 +48,15 @@ func externalPluginExecutor(a Action) func(map[string]any) (string, error) {
 		req.Header.Set("Content-Type", "application/json")
 
 		if err != nil {
-			slog.Error("Error creating request:", err)
+			slog.Error("Error creating request", "error", err)
 			return "", err
 		}
 
 		res, err := client.Do(req)
 
 		if err != nil {
-			slog.Error("Error executing action:", a.Name, err)
+			slog.Error("Error executing action", "actionName", a.Name, "error", err)
 			return "", err
-		}
-
-		if res.StatusCode != http.StatusOK {
-			slog.Error("Error executing action:", a.Name, "status code:", res.StatusCode)
-			return "", nil
 		}
 
 		if res.Body != nil {
@@ -70,12 +64,18 @@ func externalPluginExecutor(a Action) func(map[string]any) (string, error) {
 		}
 
 		body, readErr := io.ReadAll(res.Body)
+
 		if readErr != nil {
-			slog.Error("Error reading response body:", readErr)
+			slog.Error("Error reading response body", "error", readErr)
 			return "", readErr
 		}
 
-		slog.Debug("Executing action:", a.Name)
+		if res.StatusCode != http.StatusOK {
+			slog.Error("Error executing action:", "actionName", a.Name, "status code", res.StatusCode)
+			return "", errors.New(string(body))
+		}
+
+		slog.Debug("Executing action", "actionName", a.Name)
 		return string(body), nil
 	}
 }
@@ -85,14 +85,13 @@ type Plugin struct {
 	Address  string   `json:"address"`
 	Actions  []Action `json:"actions"`
 	RootPath string
-	cmd      *exec.Cmd
 }
 
 func fetchPlugins(searchPath string) ([]Plugin, error) {
 	plugins := []Plugin{}
 	entries, err := os.ReadDir(searchPath)
 	if err != nil {
-		slog.Error("Error reading directory:", err)
+		slog.Error("Error reading directory", "error", err)
 		return nil, err
 	}
 
@@ -127,13 +126,13 @@ func parsePluginConfig(path string) (Plugin, error) {
 	pluginData, err := os.ReadFile(path)
 	var plugin Plugin
 	if err != nil {
-		slog.Error("Error reading plugin file:", err)
+		slog.Error("Error reading plugin file", "error", err)
 		return plugin, err
 	}
 
 	err = json.Unmarshal(pluginData, &plugin)
 	if err != nil {
-		slog.Error("Error parsing plugin JSON:", err)
+		slog.Error("Error parsing plugin JSON", "error", err)
 		return plugin, err
 	}
 	plugin.RootPath = filepath.Dir(path)
@@ -146,23 +145,4 @@ func parsePluginConfig(path string) (Plugin, error) {
 
 	return plugin, nil
 
-}
-
-// returns the id of the plugin
-func handlePlugin(conn net.Conn) (string, error) {
-	// Read and process messages from plugin
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		slog.Error("Error reading from plugin:", err)
-		return "", err
-	}
-
-	request := string(buffer[:n])
-	return request, nil
-}
-
-type PluginConnection struct {
-	id   string
-	conn net.Conn
 }

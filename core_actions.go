@@ -94,7 +94,7 @@ func tellUser(input map[string]any) (string, error) {
 	// convert input to json
 	jsonString, err := json.Marshal(input)
 	if err != nil {
-		slog.Error("Error marshalling input", err)
+		slog.Error("Error marshalling input", "error", err)
 		return "", err
 	}
 
@@ -102,7 +102,7 @@ func tellUser(input map[string]any) (string, error) {
 	var parsedInput tellUserInput
 	err = json.Unmarshal(jsonString, &parsedInput)
 	if err != nil {
-		slog.Error("Error unmarshalling input", err)
+		slog.Error("Error unmarshalling input", "error", err)
 		return "", err
 	}
 
@@ -120,9 +120,4 @@ func getDate(_ map[string]any) (string, error) {
 
 func getDay(_ map[string]any) (string, error) {
 	return time.Now().Weekday().String(), nil
-}
-
-func getLocation(_ map[string]any) (string, error) {
-	// todo implement retrieving the users actual location
-	return "Loughborough", nil
 }

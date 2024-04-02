@@ -11,10 +11,15 @@
                     "songName": {
                         "type": "string",
                         "description": "The name of the song to play"
+                    },
+                    "deviceId": {
+                        "type": "string",
+                        "description": "The id of the device to play on, available devices can be found with music.devices"
                     }
                 },
                 "required": [
-                    "songName"
+                    "songName",
+                    "deviceId"
                 ]
             }
         },
@@ -45,6 +50,31 @@
         {
             "name": "music.stop",
             "description": "Stops/pauses music",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "music.switch_device",
+            "description": "Switch the active device for music playback",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "deviceId": {
+                        "type": "string",
+                        "description": "The id of the device to play on"
+                    }
+                },
+                "required": [
+                    "deviceId"
+                ]
+            }
+        },
+        {
+            "name": "music.devices",
+            "description": "Lists devices that can play music, is_active is true if the device is currently playing music",
             "parameters": {
                 "type": "object",
                 "properties": {},

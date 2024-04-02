@@ -64,7 +64,7 @@ func (pm *ParkerModel) getLlmDecisioning(request string, role schema.ChatMessage
 
 	// not sure this should live here
 	if err != nil {
-		slog.Warn("failed to get actions trying again", err)
+		slog.Warn("action failed, trying again", err)
 		actions, rawResponse, err = pm.correctInvalidResponse(rawResponse)
 		if err != nil {
 			return nil, err
@@ -94,7 +94,8 @@ loop:
 			go func(action ParkerAction) {
 				result, err := pm.actions[action.Tool].execute(action.ToolInput)
 				if err != nil {
-					slog.Error("error executing action (I NEED TO HANDLE THIS ERROR)", err)
+					slog.Error("error executing action", "error", err)
+					resultCh <- ToolResult{action.Tool, err.Error()}
 					return
 				}
 				resultCh <- ToolResult{action.Tool, result}
@@ -115,7 +116,7 @@ loop:
 		stringResults, err := json.Marshal(results)
 
 		if err != nil {
-			slog.Error("error marshalling results", err)
+			slog.Error("error marshalling results", "error", err)
 			break
 		}
 
@@ -128,14 +129,14 @@ loop:
 
 		actions, err = pm.getLlmDecisioning("Here is the result of the tools you used: "+string(stringResults), "human")
 		if err != nil {
-			slog.Error("error fetching actions", err)
+			slog.Error("error fetching actions", "error", err)
 			break
 		}
 
 	}
 
 	if err != nil {
-		slog.Error("error fetching actions", err)
+		slog.Error("error fetching actions", "error", err)
 		return nil, err
 	}
 
@@ -143,7 +144,7 @@ loop:
 }
 
 func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
-	var userInvalidMessage = llms.TextParts("human", "{\"error\": \"Invalid response please try again following the rules previously mentioned in the system message. Do not apologise for the issue as the user will not be aware there have been any issues\"}")
+	var userInvalidMessage = llms.TextParts("human", "{\"error\": \"Something went wrong processing your response please try again following the rules previously mentioned in the system message. Do not apologise for the issue as the user will not be aware there have been any issues, pretend as if you have not seen this message but still fix your response\"}")
 
 	// this will perform better if we include an actual error message
 	invalidMessagesAndAttempts := []llms.MessageContent{
@@ -162,7 +163,7 @@ func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAc
 
 		// if it failed again and we have retries left to use
 		if err != nil && attemptNumber < 3 {
-			slog.Warn("failed to get actions trying again", err)
+			slog.Warn("failed to complete actions, attempting again", err)
 			invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, llms.TextParts("ai", rawResponse))
 			invalidMessagesAndAttempts = append(invalidMessagesAndAttempts, userInvalidMessage)
 			reattempt(attemptNumber + 1)
@@ -201,7 +202,7 @@ func (pm ParkerModel) fetchActions(tempMessages []llms.MessageContent) ([]Parker
 	completions, err := pm.llm.GenerateContent(ctx, conversation, co)
 
 	if err != nil {
-		slog.Error("Failed to generate content", err)
+		slog.Error("Failed to generate content", "error", err)
 		return nil, "", err
 	}
 
@@ -209,7 +210,7 @@ func (pm ParkerModel) fetchActions(tempMessages []llms.MessageContent) ([]Parker
 	actionsToComplete, err := NewParkerResponse(result, &pm)
 
 	if err != nil {
-		slog.Error("Error parsing response", err, result)
+		slog.Error("Error parsing response", "error", err, "result", result)
 		return nil, "", err
 	}
 
