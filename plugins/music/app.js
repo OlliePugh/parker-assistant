@@ -2,11 +2,37 @@ import express from "express";
 import "dotenv/config";
 import { SpotifyApi } from "@spotify/web-api-ts-sdk";
 
-const sdk = SpotifyApi.withAccessToken(process.env.SPOTIFY_CLIENT_ID, {
-  access_token: process.env.ACCESS_TOKEN,
-  token_type: "Bearer",
-  refresh_token: process.env.REFRESH_TOKEN,
-});
+let sdk;
+
+const initialiseSpotify = async () => {
+  const refresh_token = process.env.REFRESH_TOKEN;
+  const authOptions = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization:
+        "Basic " +
+        Buffer.from(
+          process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_SECRET
+        ).toString("base64"),
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refresh_token,
+    }),
+  };
+  const result = await fetch(
+    "https://accounts.spotify.com/api/token",
+    authOptions
+  );
+
+  sdk = SpotifyApi.withAccessToken(
+    process.env.SPOTIFY_CLIENT_ID,
+    result.json()
+  );
+};
+
+initialiseSpotify();
 
 const app = express();
 const port = 8081;
@@ -15,7 +41,7 @@ app.use(express.json());
 
 app.post("/music.devices", async (_, res) => {
   const devices = await sdk.player.getAvailableDevices();
-  // remove unnecessary fields
+  // remove unnecessary fields to improve ai processing
   devices.devices.forEach((device) => {
     delete device.is_active;
     delete device.is_private_session;

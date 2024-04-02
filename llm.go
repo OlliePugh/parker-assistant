@@ -30,7 +30,7 @@ To use a tool, respond with a JSON array object with the following structure:
 	"tool_input": <parameters for the tool matching the above JSON schema>
 }]
 
-You MUST always return a JSON payload with the above structure.
+You MUST always return a JSON ARRAY with the above structure.
 
 You can use tools to gather more infomation before providing a final response to the user.
 
@@ -143,7 +143,7 @@ loop:
 }
 
 func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
-	var userInvalidMessage = llms.TextParts("human", "{\"error\": \"Invalid response please try again following the rules previously mentioned in the system message\"}")
+	var userInvalidMessage = llms.TextParts("human", "{\"error\": \"Invalid response please try again following the rules previously mentioned in the system message. Do not apologise for the issue as the user will not be aware there have been any issues\"}")
 
 	// this will perform better if we include an actual error message
 	invalidMessagesAndAttempts := []llms.MessageContent{
