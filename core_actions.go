@@ -107,7 +107,7 @@ func tellUser(input map[string]any) (string, error) {
 	}
 
 	fmt.Println(parsedInput.Response)
-	return "Message read to user", nil
+	return parsedInput.Response, nil
 }
 
 func getTime(_ map[string]any) (string, error) {

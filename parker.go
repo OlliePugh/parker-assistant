@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
+	"encoding/json"
+	"io"
 	"log"
 	"log/slog"
-	"os"
+	"net/http"
 
 	"github.com/tmc/langchaingo/llms/openai"
 )
@@ -47,19 +47,25 @@ func main() {
 
 	closeHandler()
 
-	listenForUserInput(&pm)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var payload RequestPayload
+
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		result, err := pm.executeUserInput(payload.Query)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		io.WriteString(w, result)
+
+	})
+	http.ListenAndServe(":8090", nil)
 }
 
-func listenForUserInput(pm *ParkerModel) {
-	for {
-		buf := bufio.NewReader(os.Stdin)
-		fmt.Print("> ")
-		sentence, err := buf.ReadBytes('\n')
-		if err != nil {
-			slog.Error("Error reading user input", "error", err)
-		} else {
-			slog.Debug("User input:", "value", string(sentence))
-			pm.executeUserInput(string(sentence))
-		}
-	}
+type RequestPayload struct {
+	Query string
 }

@@ -80,9 +80,9 @@ type ToolResult struct {
 	ToolOutput any
 }
 
-func (pm *ParkerModel) executeUserInput(request string) ([]ParkerAction, error) {
+func (pm *ParkerModel) executeUserInput(request string) (string, error) {
 	actions, err := pm.getLlmDecisioning(request, "human")
-
+	var finalString string
 	// do while tell.user not in actions
 loop:
 	for {
@@ -123,6 +123,7 @@ loop:
 		// if tell.user is in actions
 		for _, result := range results {
 			if result.Tool == "tell.user" {
+				finalString = result.ToolOutput.(string)
 				break loop // the user has been told something, no need for internal processing
 			}
 		}
@@ -137,10 +138,10 @@ loop:
 
 	if err != nil {
 		slog.Error("error fetching actions", "error", err)
-		return nil, err
+		return "", err
 	}
 
-	return actions, nil
+	return finalString, nil
 }
 
 func (pm ParkerModel) correctInvalidResponse(invalidResponse string) ([]ParkerAction, string, error) {
